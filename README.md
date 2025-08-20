@@ -1,4 +1,4 @@
-# Домашнее задание к занятию "`Название занятия`" - `Фамилия и имя студента`
+# Домашнее задание к занятию "`Отказоустойчивость в облаке`" - `Кудряшов Андрей`
 
 
 ### Инструкция по выполнению домашнего задания
@@ -24,25 +24,165 @@
 
 ### Задание 1
 
-`Приведите ответ в свободной форме........`
+В качестве результата пришлите:
 
-1. `Заполните здесь этапы выполнения, если требуется ....`
-2. `Заполните здесь этапы выполнения, если требуется ....`
-3. `Заполните здесь этапы выполнения, если требуется ....`
-4. `Заполните здесь этапы выполнения, если требуется ....`
-5. `Заполните здесь этапы выполнения, если требуется ....`
-6. 
+1. Terraform Playbook.
+2. Скриншот статуса балансировщика и целевой группы.
+3. Скриншот страницы, которая открылась при запросе IP-адреса балансировщика.
+
+Я так понял в 1 задании имеется ввиду Terraform main.tf и ansible playbook?
+
+terraform main.tf:
+```
+terraform {
+  required_providers {
+    yandex = {
+      source = "yandex-cloud/yandex"
+    }
+  }
+}
+
+
+provider "yandex" {
+  zone = "ru-central1-b"
+}
+
+
+resource "yandex_compute_instance" "vm" {
+  count = 2
+
+  name        = "vm${count.index}"
+  platform_id = "standard-v1"
+  boot_disk {
+    initialize_params {
+      image_id = "fd87j6d92jlrbjqbl32q"
+      size     = 8
+    }
+  }
+
+  network_interface {
+    subnet_id = yandex_vpc_subnet.subnet1.id
+    nat       = true
+  }
+
+  resources {
+    cores         = 2
+    memory        = 2
+    core_fraction = 20
+  }
+
+metadata = { ssh-keys = "ubuntu:${file("~/.ssh/id_ed25519.pub")}" }
+}
+
+
+resource "yandex_vpc_network" "network1" {
+  name = "network1"
+}
+
+
+resource "yandex_vpc_subnet" "subnet1" {
+  name           = "subnet1"
+  v4_cidr_blocks = ["172.24.8.0/24"]
+  network_id     = yandex_vpc_network.network1.id
+}
+
+
+resource "yandex_lb_target_group" "group1" {
+  name = "group1"
+
+  dynamic "target" {
+    for_each = yandex_compute_instance.vm
+    content {
+      subnet_id = yandex_vpc_subnet.subnet1.id
+      address   = target.value.network_interface.0.ip_address
+    }
+  }
+}
+
+
+resource "yandex_lb_network_load_balancer" "balancer1" {
+  name                = "balancer1"
+  deletion_protection = "false"
+  listener {
+    name = "my-lb1"
+    port = 80
+    external_address_spec {
+      ip_version = "ipv4"
+    }
+  }
+
+ attached_target_group {
+    target_group_id = yandex_lb_target_group.group1.id
+    healthcheck {
+      name = "http"
+      http_options {
+        port = 80
+        path = "/"
+      }
+    }
+  }
+}
 
 ```
-Поле для вставки кода...
-....
-....
-....
-....
+
+Ansible:
+```
+---
+- name: installysing_Nginx
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: cace_update
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: install_Nginx
+      apt:
+        name: nginx
+        state: present
+
+    - name: start_Nginx
+      systemd:
+        name: nginx
+        state: started
+        enabled: yes
+
+    - name: status-check_Nginx
+      command: systemctl is-active nginx
+      register: nginx_status
+      changed_when: false
+
+    - name: Nginx_interactiv_status
+      debug:
+        msg: "Nginx_ACTIVE: {{ nginx_status.stdout }}"
+
+    - name: generate_info_nginx
+      copy:
+        content: |
+          Server: {{ inventory_hostname }}
+          External IP: {{ ansible_host }}
+          Internal IP: {{ ansible_default_ipv4.address }}
+        dest: /var/www/html/info
+        mode: '0644'
+
 ```
 
-`При необходимости прикрепитe сюда скриншоты
-![Название скриншота 1](ссылка на скриншот 1)`
+
+Скриншот балансировщика:
+
+<img width="819" height="798" alt="1" src="https://github.com/user-attachments/assets/5fcecadc-6272-4fb6-8ddb-7e25e9cd4724" />
+
+<img width="1812" height="288" alt="2" src="https://github.com/user-attachments/assets/dbe13abe-31b9-4581-ae89-f41794c2ee7a" />
+
+
+Скриншот запроса:
+
+<img width="983" height="579" alt="3" src="https://github.com/user-attachments/assets/24c0a1e3-b984-4401-b9d5-679ed33cbfc0" />
+
+<img width="617" height="175" alt="4" src="https://github.com/user-attachments/assets/07c82abc-21fc-46b3-8674-736020a1dba2" />
 
 
 ---
